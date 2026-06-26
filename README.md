@@ -9,7 +9,20 @@ roadmap.
 
 ## Status
 
-Early development — **Phase 1 (MVP)**: single-page Tier-1 capture/restore.
+Early development, but functional. Implemented so far:
+
+- **Tier-1 capture/restore** — form fields, scroll position, media playback time
+- **File uploads** survive a restore (re-injected via `DataTransfer`, 25 MB/file cap)
+- **Tier-2 storage** — `localStorage` / `sessionStorage`, restored additively so a
+  fresh login token is never clobbered
+- **Workspaces** — bundle several open tabs and restore them together
+- **Restore overlay** — honest "what restored" summary, Retry-after-login, file
+  re-attach download fallback, reload hint for storage
+- **Per-site opt-in** + **auto-save** for forms on enabled sites
+- Local-first (IndexedDB), no network calls
+
+Not yet: encryption at rest, cookies, export/import, cross-device sync. See
+[`PRD.md`](./PRD.md).
 
 ## Tech
 
