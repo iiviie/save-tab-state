@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StateKeep — Dashboard</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="head">
+      <h1>StateKeep</h1>
+      <p class="tagline">Saved website state — local &amp; private.</p>
+    </header>
+
+    <main>
+      <section>
+        <div class="section-head">
+          <h2>Snapshots</h2>
+          <span id="count" class="muted"></span>
+        </div>
+        <ul id="snapshots"></ul>
+        <p id="empty" class="muted" hidden>
+          No snapshots yet. Open a page, click the StateKeep toolbar icon, and
+          hit “Save this page”.
+        </p>
+      </section>
+    </main>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

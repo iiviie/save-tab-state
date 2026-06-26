@@ -1,0 +1,22 @@
+{
+  "name": "save-tab-state",
+  "version": "0.1.0",
+  "description": "StateKeep — save and restore website state (forms, scroll, route) across sessions, for Chrome/Chromium and Firefox.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "wxt",
+    "dev:firefox": "wxt -b firefox",
+    "build": "wxt build",
+    "build:firefox": "wxt build -b firefox",
+    "zip": "wxt zip",
+    "zip:firefox": "wxt zip -b firefox",
+    "compile": "tsc --noEmit",
+    "postinstall": "wxt prepare"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "wxt": "^0.20.27"
+  }
+}

@@ -1,0 +1,74 @@
+// Core data model for StateKeep.
+//
+// State is captured in tiers (see PRD §5). Phase 1 implements Tier 1: the
+// observable page/DOM state that an extension can reliably read and re-apply.
+
+/** A single captured form field, keyed by a best-effort stable selector. */
+export interface CapturedField {
+  /** CSS-ish selector used to relocate the element on restore. */
+  selector: string;
+  /** Element kind so restore knows how to apply the value. */
+  kind: 'text' | 'checkbox' | 'radio' | 'select' | 'contenteditable';
+  /** The element's name attribute, if any — used as a fallback matcher. */
+  name?: string;
+  /** Serialized value. For checkboxes/radios this is "true"/"false". */
+  value: string;
+  /** For <select multiple>, the set of selected option values. */
+  selectedValues?: string[];
+  /** Human label guess, for the "what will be saved" preview UI. */
+  label?: string;
+}
+
+/** Scroll offset for the window or a scrollable container. */
+export interface CapturedScroll {
+  /** Selector of the scroll container, or "window" for the page itself. */
+  selector: string;
+  x: number;
+  y: number;
+}
+
+/** The Tier-1 payload captured from a page. */
+export interface Tier1State {
+  fields: CapturedField[];
+  scroll: CapturedScroll[];
+  /** Playback position of the first <video>/<audio>, if present (seconds). */
+  mediaTime?: number;
+}
+
+/** A snapshot of one page at a point in time. */
+export interface Snapshot {
+  id: string;
+  /** Full URL captured. Restore navigates here first. */
+  url: string;
+  /** Origin, used for per-site grouping and opt-in checks. */
+  origin: string;
+  /** Page <title> at capture time, for display. */
+  title: string;
+  /** Optional user-given name. */
+  name?: string;
+  /** ms since epoch. */
+  createdAt: number;
+  /** The captured Tier-1 state. */
+  tier1: Tier1State;
+  /** Optional data-URL screenshot/thumbnail for previews. */
+  thumbnail?: string;
+}
+
+/** A named bundle of snapshots that open and restore together. */
+export interface Workspace {
+  id: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+  /** Snapshot ids included in this workspace. */
+  snapshotIds: string[];
+}
+
+/** Per-origin user settings (opt-in model). */
+export interface SiteSetting {
+  origin: string;
+  /** Whether StateKeep may capture on this origin. */
+  enabled: boolean;
+  /** Whether to auto-save (Phase 2). */
+  autoSave: boolean;
+}
