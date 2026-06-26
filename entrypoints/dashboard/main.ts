@@ -51,7 +51,9 @@ function render(snapshots: Snapshot[]): void {
     const meta = document.createElement('span');
     meta.className = 'meta';
     const host = new URL(snap.url).hostname;
-    meta.textContent = `${host} · ${snap.tier1.fields.length} fields · ${snap.tier1.scroll.length} scroll · ${fmtDate(snap.createdAt)}`;
+    const fileCount = snap.tier1.files.reduce((n, g) => n + g.files.length, 0);
+    const filePart = fileCount > 0 ? ` · ${fileCount} files` : '';
+    meta.textContent = `${host} · ${snap.tier1.fields.length} fields${filePart} · ${snap.tier1.scroll.length} scroll · ${fmtDate(snap.createdAt)}`;
 
     info.append(title, meta);
 

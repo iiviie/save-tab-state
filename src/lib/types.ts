@@ -27,10 +27,31 @@ export interface CapturedScroll {
   y: number;
 }
 
+/** A single uploaded file, stored as a data URL so it survives messaging + IDB. */
+export interface CapturedFile {
+  name: string;
+  type: string;
+  size: number;
+  /** base64 data URL of the file bytes. */
+  dataUrl: string;
+}
+
+/** The files attached to one <input type="file">. */
+export interface CapturedFileInput {
+  selector: string;
+  name?: string;
+  label?: string;
+  files: CapturedFile[];
+}
+
 /** The Tier-1 payload captured from a page. */
 export interface Tier1State {
   fields: CapturedField[];
   scroll: CapturedScroll[];
+  /** File uploads, re-injected on restore via the DataTransfer API. */
+  files: CapturedFileInput[];
+  /** Files skipped because they exceeded the size cap, for honest reporting. */
+  skippedFiles?: { name: string; size: number }[];
   /** Playback position of the first <video>/<audio>, if present (seconds). */
   mediaTime?: number;
 }

@@ -49,7 +49,9 @@ function render(snapshots: Snapshot[]): void {
     const meta = document.createElement('span');
     meta.className = 'meta';
     const host = new URL(snap.url).hostname;
-    meta.textContent = `${host} · ${snap.tier1.fields.length} fields · ${relativeTime(snap.createdAt)}`;
+    const fileCount = snap.tier1.files.reduce((n, g) => n + g.files.length, 0);
+    const filePart = fileCount > 0 ? ` · ${fileCount} files` : '';
+    meta.textContent = `${host} · ${snap.tier1.fields.length} fields${filePart} · ${relativeTime(snap.createdAt)}`;
     info.append(title, meta);
 
     const actions = document.createElement('div');
@@ -101,13 +103,14 @@ async function restore(id: string): Promise<void> {
     id,
   })) as RestoreResult;
   if (res.ok && res.report) {
-    const { applied, missing } = res.report;
-    setStatus(
-      missing > 0
-        ? `Restored ${applied} fields, ${missing} not found yet.`
-        : `Restored ${applied} fields.`,
-      'ok',
-    );
+    const { applied, missing, filesRestored, filesNeedingManualReattach } =
+      res.report;
+    const parts = [`Restored ${applied} fields`];
+    if (filesRestored > 0) parts.push(`${filesRestored} files`);
+    if (missing > 0) parts.push(`${missing} fields not found yet`);
+    if (filesNeedingManualReattach > 0)
+      parts.push(`${filesNeedingManualReattach} files need manual re-attach`);
+    setStatus(parts.join(', ') + '.', 'ok');
   } else {
     setStatus(res.error || 'Restore failed.', 'err');
   }

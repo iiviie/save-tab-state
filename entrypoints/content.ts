@@ -23,14 +23,17 @@ export default defineContentScript({
     browser.runtime.onMessage.addListener(
       (message: ContentMessage, _sender, sendResponse) => {
         if (message.type === 'capture-tier1') {
-          const response: CaptureResponse = {
-            ok: true,
-            state: captureTier1(),
-            title: document.title,
-            url: location.href,
-          };
-          sendResponse(response);
-          return; // sync response
+          // Async: reading file uploads uses FileReader.
+          captureTier1().then((state) => {
+            const response: CaptureResponse = {
+              ok: true,
+              state,
+              title: document.title,
+              url: location.href,
+            };
+            sendResponse(response);
+          });
+          return true; // async response
         }
 
         if (message.type === 'apply-tier1') {

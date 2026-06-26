@@ -2,7 +2,7 @@
 // page context. Handles SPA timing via retry-with-backoff rather than a fixed
 // delay (PRD §6.6): elements may not exist until the app hydrates.
 
-import type { CapturedField, Tier1State } from './types';
+import type { CapturedField, CapturedFile, Tier1State } from './types';
 import { findElement } from './selectors';
 
 /** Result of a restore attempt, for honest UI reporting (PRD §10). */
@@ -10,6 +10,10 @@ export interface RestoreReport {
   applied: number;
   missing: number;
   total: number;
+  /** Files re-attached to their inputs. */
+  filesRestored: number;
+  /** Files we held but the page refused to accept (manual re-attach needed). */
+  filesNeedingManualReattach: number;
 }
 
 function fire(el: Element, type: string): void {
@@ -55,6 +59,53 @@ function applyField(field: CapturedField): boolean {
     default:
       return false;
   }
+}
+
+/** Turn a stored data URL back into a File object. */
+async function fileFromCapture(captured: CapturedFile): Promise<File> {
+  const res = await fetch(captured.dataUrl);
+  const blob = await res.blob();
+  return new File([blob], captured.name, {
+    type: captured.type || blob.type,
+  });
+}
+
+/**
+ * Re-attach captured files to their <input type="file"> via DataTransfer.
+ * Some sites reject programmatic file assignment; we count those as needing a
+ * manual re-attach rather than failing silently (PRD §6.2).
+ */
+async function applyFiles(
+  state: Tier1State,
+): Promise<{ restored: number; manual: number }> {
+  let restored = 0;
+  let manual = 0;
+
+  for (const group of state.files) {
+    const el = findElement(group.selector, group.name) as HTMLInputElement | null;
+    if (!el || el.type !== 'file') {
+      manual += group.files.length;
+      continue;
+    }
+    try {
+      const dt = new DataTransfer();
+      for (const captured of group.files) {
+        dt.items.add(await fileFromCapture(captured));
+      }
+      el.files = dt.files;
+      // Verify the assignment actually took (some pages block it).
+      if (el.files.length === group.files.length) {
+        fire(el, 'input');
+        fire(el, 'change');
+        restored += group.files.length;
+      } else {
+        manual += group.files.length;
+      }
+    } catch {
+      manual += group.files.length;
+    }
+  }
+  return { restored, manual };
 }
 
 function applyScroll(state: Tier1State): void {
@@ -111,6 +162,7 @@ export async function restoreTier1(
     }
   }
 
+  const fileResult = await applyFiles(state);
   applyScroll(state);
   applyMedia(state);
 
@@ -118,5 +170,7 @@ export async function restoreTier1(
     applied,
     missing: pending.length,
     total: state.fields.length,
+    filesRestored: fileResult.restored,
+    filesNeedingManualReattach: fileResult.manual,
   };
 }

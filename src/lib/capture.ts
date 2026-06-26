@@ -1,8 +1,18 @@
 // Tier-1 capture: read the observable page state (form fields, scroll, media
 // position). Runs in the content-script / page context. See PRD §5.1.
 
-import type { CapturedField, CapturedScroll, Tier1State } from './types';
+import type {
+  CapturedField,
+  CapturedScroll,
+  CapturedFile,
+  CapturedFileInput,
+  Tier1State,
+} from './types';
 import { selectorFor } from './selectors';
+
+// Per-file size cap for v1 (PRD open question on storage). Larger files are
+// skipped and reported rather than silently dropped.
+const MAX_FILE_BYTES = 25 * 1024 * 1024; // 25 MB
 
 // Field types we never capture by default — passwords and likely-sensitive
 // inputs (PRD §8). The user can opt in per field later (Phase 2).
@@ -113,6 +123,52 @@ function captureScroll(): CapturedScroll[] {
   return scroll;
 }
 
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function captureFiles(
+  skipped: { name: string; size: number }[],
+): Promise<CapturedFileInput[]> {
+  const inputs = document.querySelectorAll<HTMLInputElement>('input[type="file"]');
+  const result: CapturedFileInput[] = [];
+
+  for (const el of inputs) {
+    if (!el.files || el.files.length === 0) continue;
+    const captured: CapturedFile[] = [];
+    for (const file of Array.from(el.files)) {
+      if (file.size > MAX_FILE_BYTES) {
+        skipped.push({ name: file.name, size: file.size });
+        continue;
+      }
+      try {
+        captured.push({
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          dataUrl: await readAsDataUrl(file),
+        });
+      } catch {
+        skipped.push({ name: file.name, size: file.size });
+      }
+    }
+    if (captured.length > 0) {
+      result.push({
+        selector: selectorFor(el),
+        name: el.name || undefined,
+        label: labelFor(el),
+        files: captured,
+      });
+    }
+  }
+  return result;
+}
+
 function captureMediaTime(): number | undefined {
   const media = document.querySelector<HTMLMediaElement>('video, audio');
   if (media && media.currentTime > 0) return media.currentTime;
@@ -120,10 +176,14 @@ function captureMediaTime(): number | undefined {
 }
 
 /** Capture the full Tier-1 state of the current page. */
-export function captureTier1(): Tier1State {
+export async function captureTier1(): Promise<Tier1State> {
+  const skippedFiles: { name: string; size: number }[] = [];
+  const files = await captureFiles(skippedFiles);
   return {
     fields: captureFields(),
     scroll: captureScroll(),
+    files,
+    skippedFiles: skippedFiles.length > 0 ? skippedFiles : undefined,
     mediaTime: captureMediaTime(),
   };
 }
