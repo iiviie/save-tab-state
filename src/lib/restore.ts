@@ -2,8 +2,9 @@
 // page context. Handles SPA timing via retry-with-backoff rather than a fixed
 // delay (PRD §6.6): elements may not exist until the app hydrates.
 
-import type { CapturedField, CapturedFile, Tier1State } from './types';
+import type { CapturedField, CapturedFile, Tier1State, Tier2State } from './types';
 import { findElement } from './selectors';
+import { restoreTier2 } from './tier2';
 
 /** Result of a restore attempt, for honest UI reporting (PRD §10). */
 export interface RestoreReport {
@@ -14,6 +15,8 @@ export interface RestoreReport {
   filesRestored: number;
   /** Files we held but the page refused to accept (manual re-attach needed). */
   filesNeedingManualReattach: number;
+  /** Tier-2 storage keys additively written (may need a reload to take effect). */
+  tier2KeysAdded: number;
 }
 
 function fire(el: Element, type: string): void {
@@ -143,8 +146,13 @@ function applyMedia(state: Tier1State): void {
  */
 export async function restoreTier1(
   state: Tier1State,
+  tier2?: Tier2State,
   maxAttempts = 10,
 ): Promise<RestoreReport> {
+  // Apply Tier-2 storage first (additively) so any app that re-reads storage
+  // during hydration can pick it up.
+  const tier2KeysAdded = restoreTier2(tier2);
+
   const pending = [...state.fields];
   let applied = 0;
 
@@ -172,5 +180,6 @@ export async function restoreTier1(
     total: state.fields.length,
     filesRestored: fileResult.restored,
     filesNeedingManualReattach: fileResult.manual,
+    tier2KeysAdded,
   };
 }

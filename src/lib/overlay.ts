@@ -33,10 +33,12 @@ export function showRestoreOverlay(
 
   const needsRetry = report.missing > 0;
   const manualFiles = report.filesNeedingManualReattach > 0;
+  const tier2Added = report.tier2KeysAdded > 0;
 
   const summary =
     `Restored ${report.applied} field${report.applied === 1 ? '' : 's'}` +
     (report.filesRestored > 0 ? `, ${report.filesRestored} file(s)` : '') +
+    (tier2Added ? `, ${report.tier2KeysAdded} storage key(s)` : '') +
     '.';
 
   shadow.innerHTML = `
@@ -82,6 +84,13 @@ export function showRestoreOverlay(
             : ''
         }
         ${
+          tier2Added
+            ? `<div class="note">Restored saved site data into storage. Some
+                 apps only read it on load — reload to apply.</div>
+               <button id="reload">Reload page</button>`
+            : ''
+        }
+        ${
           manualFiles
             ? `<div class="note">${report.filesNeedingManualReattach} file(s)
                  couldn't be attached automatically. Download and drag them back:</div>
@@ -97,6 +106,7 @@ export function showRestoreOverlay(
     host.remove();
     onRetry();
   });
+  shadow.getElementById('reload')?.addEventListener('click', () => location.reload());
 
   if (manualFiles) {
     const filesEl = shadow.getElementById('files')!;

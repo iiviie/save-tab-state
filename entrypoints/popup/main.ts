@@ -147,10 +147,16 @@ async function restore(id: string): Promise<void> {
     id,
   })) as RestoreResult;
   if (res.ok && res.report) {
-    const { applied, missing, filesRestored, filesNeedingManualReattach } =
-      res.report;
+    const {
+      applied,
+      missing,
+      filesRestored,
+      filesNeedingManualReattach,
+      tier2KeysAdded,
+    } = res.report;
     const parts = [`Restored ${applied} fields`];
     if (filesRestored > 0) parts.push(`${filesRestored} files`);
+    if (tier2KeysAdded > 0) parts.push(`${tier2KeysAdded} storage keys`);
     if (missing > 0) parts.push(`${missing} fields not found yet`);
     if (filesNeedingManualReattach > 0)
       parts.push(`${filesNeedingManualReattach} files need manual re-attach`);

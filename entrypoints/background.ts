@@ -33,7 +33,13 @@ import type {
   SiteSettingResult,
   ListSiteSettingsResult,
 } from '@/src/lib/messaging';
-import type { Snapshot, Workspace, SiteSetting, Tier1State } from '@/src/lib/types';
+import type {
+  Snapshot,
+  Workspace,
+  SiteSetting,
+  Tier1State,
+  Tier2State,
+} from '@/src/lib/types';
 
 /** Default opt-in state for an origin we've never seen. */
 function defaultSetting(origin: string): SiteSetting {
@@ -64,6 +70,7 @@ async function captureTabToSnapshot(
     name,
     createdAt: Date.now(),
     tier1: capture.state,
+    tier2: capture.tier2,
   };
   await putSnapshot(snapshot);
   return snapshot;
@@ -118,6 +125,7 @@ async function openAndRestore(
   const res = (await browser.tabs.sendMessage(tab.id, {
     type: 'apply-tier1',
     state: snapshot.tier1,
+    tier2: snapshot.tier2,
   })) as ApplyResponse;
   return res.report;
 }
@@ -236,6 +244,7 @@ async function autoSave(
   url: string,
   title: string,
   state: Tier1State,
+  tier2: Tier2State,
 ): Promise<SimpleResult> {
   const origin = new URL(url).origin;
   const setting = await getSiteSetting(origin);
@@ -254,6 +263,7 @@ async function autoSave(
     title: title || new URL(url).hostname,
     createdAt: Date.now(),
     tier1: state,
+    tier2,
     auto: true,
   };
   await putSnapshot(snapshot);
@@ -315,7 +325,9 @@ export default defineBackground(() => {
             } satisfies ListSiteSettingsResult);
             break;
           case 'auto-save':
-            sendResponse(await autoSave(message.url, message.title, message.state));
+            sendResponse(
+              await autoSave(message.url, message.title, message.state, message.tier2),
+            );
             break;
           default:
             sendResponse({ ok: false, error: 'Unknown command.' });

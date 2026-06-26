@@ -56,6 +56,17 @@ export interface Tier1State {
   mediaTime?: number;
 }
 
+/**
+ * Tier-2 client storage (PRD §5.2): the app's own localStorage/sessionStorage.
+ * Restoring this brings back an app's client-side view (drafts, editor content).
+ * It also holds auth tokens, which expire — so restore is *additive* (it only
+ * sets keys the fresh page lacks) to avoid clobbering a fresh login (PRD §5.3).
+ */
+export interface Tier2State {
+  local: Record<string, string>;
+  session: Record<string, string>;
+}
+
 /** A snapshot of one page at a point in time. */
 export interface Snapshot {
   id: string;
@@ -71,6 +82,8 @@ export interface Snapshot {
   createdAt: number;
   /** The captured Tier-1 state. */
   tier1: Tier1State;
+  /** The captured Tier-2 client storage, if any. */
+  tier2?: Tier2State;
   /** True for snapshots written by auto-save (deduped per URL). */
   auto?: boolean;
   /** Optional data-URL screenshot/thumbnail for previews. */

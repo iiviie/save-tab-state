@@ -8,6 +8,7 @@
 // after per-site opt-in is tracked for a later phase (PRD §8, minimal perms).
 
 import { captureTier1 } from '@/src/lib/capture';
+import { captureTier2 } from '@/src/lib/tier2';
 import { restoreTier1 } from '@/src/lib/restore';
 import { showRestoreOverlay } from '@/src/lib/overlay';
 import type {
@@ -16,7 +17,7 @@ import type {
   ApplyResponse,
   SiteSettingResult,
 } from '@/src/lib/messaging';
-import type { Tier1State } from '@/src/lib/types';
+import type { Tier1State, Tier2State } from '@/src/lib/types';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -25,9 +26,9 @@ export default defineContentScript({
   main() {
     // Apply state and show the honest restore summary overlay. The overlay's
     // Retry re-runs this (e.g. after the user signs in), so we keep the state.
-    async function applyAndReport(state: Tier1State) {
-      const report = await restoreTier1(state);
-      showRestoreOverlay(report, state, () => void applyAndReport(state));
+    async function applyAndReport(state: Tier1State, tier2?: Tier2State) {
+      const report = await restoreTier1(state, tier2);
+      showRestoreOverlay(report, state, () => void applyAndReport(state, tier2));
       return report;
     }
 
@@ -39,6 +40,7 @@ export default defineContentScript({
             const response: CaptureResponse = {
               ok: true,
               state,
+              tier2: captureTier2(),
               title: document.title,
               url: location.href,
             };
@@ -49,7 +51,7 @@ export default defineContentScript({
 
         if (message.type === 'apply-tier1') {
           // Async: restore retries over time, so keep the channel open.
-          applyAndReport(message.state).then((report) => {
+          applyAndReport(message.state, message.tier2).then((report) => {
             const response: ApplyResponse = { ok: true, report };
             sendResponse(response);
           });
@@ -96,6 +98,7 @@ async function initAutoSave() {
         await browser.runtime.sendMessage({
           type: 'auto-save',
           state,
+          tier2: captureTier2(),
           title: document.title,
           url: location.href,
         });

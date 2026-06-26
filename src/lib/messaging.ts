@@ -5,7 +5,13 @@
 //
 // Each message has a `type` discriminant and a matching response shape.
 
-import type { Tier1State, Snapshot, Workspace, SiteSetting } from './types';
+import type {
+  Tier1State,
+  Tier2State,
+  Snapshot,
+  Workspace,
+  SiteSetting,
+} from './types';
 import type { RestoreReport } from './restore';
 
 // --- content-script messages (background -> content) ---
@@ -16,6 +22,7 @@ export interface CaptureRequest {
 export interface CaptureResponse {
   ok: true;
   state: Tier1State;
+  tier2: Tier2State;
   title: string;
   url: string;
 }
@@ -23,6 +30,7 @@ export interface CaptureResponse {
 export interface ApplyRequest {
   type: 'apply-tier1';
   state: Tier1State;
+  tier2?: Tier2State;
 }
 export interface ApplyResponse {
   ok: true;
@@ -98,6 +106,7 @@ export interface ListSiteSettingsCmd {
 export interface AutoSaveCmd {
   type: 'auto-save';
   state: Tier1State;
+  tier2: Tier2State;
   title: string;
   url: string;
 }
