@@ -9,17 +9,27 @@
 
 import { captureTier1 } from '@/src/lib/capture';
 import { restoreTier1 } from '@/src/lib/restore';
+import { showRestoreOverlay } from '@/src/lib/overlay';
 import type {
   ContentMessage,
   CaptureResponse,
   ApplyResponse,
 } from '@/src/lib/messaging';
+import type { Tier1State } from '@/src/lib/types';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
   runAt: 'document_idle',
   allFrames: false,
   main() {
+    // Apply state and show the honest restore summary overlay. The overlay's
+    // Retry re-runs this (e.g. after the user signs in), so we keep the state.
+    async function applyAndReport(state: Tier1State) {
+      const report = await restoreTier1(state);
+      showRestoreOverlay(report, state, () => void applyAndReport(state));
+      return report;
+    }
+
     browser.runtime.onMessage.addListener(
       (message: ContentMessage, _sender, sendResponse) => {
         if (message.type === 'capture-tier1') {
@@ -38,7 +48,7 @@ export default defineContentScript({
 
         if (message.type === 'apply-tier1') {
           // Async: restore retries over time, so keep the channel open.
-          restoreTier1(message.state).then((report) => {
+          applyAndReport(message.state).then((report) => {
             const response: ApplyResponse = { ok: true, report };
             sendResponse(response);
           });
