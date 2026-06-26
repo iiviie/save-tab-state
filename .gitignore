@@ -8,3 +8,4 @@ dist/
 *.zip
 .env
 .env.*
+.chrome-dev-profile/

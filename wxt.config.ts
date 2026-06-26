@@ -1,9 +1,18 @@
 import { defineConfig } from 'wxt';
+import { resolve } from 'node:path';
 
 // WXT generates a Manifest V3 build for Chrome/Chromium and an MV3 build for
 // Firefox from this single config. Run `wxt build` for Chrome and
 // `wxt build -b firefox` for Firefox.
 export default defineConfig({
+  // By default `wxt` (dev mode) launches Chrome with a throwaway profile that
+  // is discarded on close — so the extension's IndexedDB (saved snapshots) does
+  // NOT survive a restart. Pin a persistent dev profile so data persists across
+  // `npm run dev` sessions, matching how a real installed extension behaves.
+  webExt: {
+    chromiumProfile: resolve('.chrome-dev-profile'),
+    keepProfileChanges: true,
+  },
   manifest: {
     name: 'StateKeep — Save & Restore Tab State',
     description:
