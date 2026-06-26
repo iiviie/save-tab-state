@@ -5,7 +5,7 @@
 //
 // Each message has a `type` discriminant and a matching response shape.
 
-import type { Tier1State, Snapshot } from './types';
+import type { Tier1State, Snapshot, Workspace } from './types';
 import type { RestoreReport } from './restore';
 
 // --- content-script messages (background -> content) ---
@@ -50,11 +50,45 @@ export interface DeleteSnapshotCmd {
   id: string;
 }
 
+/** Lightweight view of an open browser tab, for the workspace picker. */
+export interface TabInfo {
+  id: number;
+  title: string;
+  url: string;
+  favIconUrl?: string;
+}
+
+export interface ListTabsCmd {
+  type: 'list-tabs';
+}
+export interface SaveWorkspaceCmd {
+  type: 'save-workspace';
+  name: string;
+  /** Tab ids the user chose to include. */
+  tabIds: number[];
+}
+export interface ListWorkspacesCmd {
+  type: 'list-workspaces';
+}
+export interface RestoreWorkspaceCmd {
+  type: 'restore-workspace';
+  id: string;
+}
+export interface DeleteWorkspaceCmd {
+  type: 'delete-workspace';
+  id: string;
+}
+
 export type BackgroundCommand =
   | SaveCmd
   | RestoreCmd
   | ListSnapshotsCmd
-  | DeleteSnapshotCmd;
+  | DeleteSnapshotCmd
+  | ListTabsCmd
+  | SaveWorkspaceCmd
+  | ListWorkspacesCmd
+  | RestoreWorkspaceCmd
+  | DeleteWorkspaceCmd;
 
 export interface SaveResult {
   ok: boolean;
@@ -73,5 +107,36 @@ export interface ListResult {
 }
 export interface SimpleResult {
   ok: boolean;
+  error?: string;
+}
+
+export interface ListTabsResult {
+  ok: boolean;
+  tabs?: TabInfo[];
+  error?: string;
+}
+
+/** A workspace plus its resolved snapshots, for display. */
+export interface WorkspaceView {
+  workspace: Workspace;
+  snapshots: Snapshot[];
+}
+export interface ListWorkspacesResult {
+  ok: boolean;
+  workspaces?: WorkspaceView[];
+  error?: string;
+}
+export interface SaveWorkspaceResult {
+  ok: boolean;
+  workspace?: Workspace;
+  /** How many tabs were captured vs requested. */
+  captured?: number;
+  requested?: number;
+  error?: string;
+}
+export interface RestoreWorkspaceResult {
+  ok: boolean;
+  /** Per-snapshot restore reports, in workspace order. */
+  reports?: { snapshotId: string; report?: RestoreReport; error?: string }[];
   error?: string;
 }

@@ -9,6 +9,9 @@ import {
   getSnapshot,
   listSnapshots,
   deleteSnapshot,
+  putWorkspace,
+  listWorkspaces,
+  deleteWorkspace,
 } from '@/src/lib/storage';
 import type {
   BackgroundCommand,
@@ -18,42 +21,56 @@ import type {
   RestoreResult,
   ListResult,
   SimpleResult,
+  ListTabsResult,
+  ListWorkspacesResult,
+  SaveWorkspaceResult,
+  RestoreWorkspaceResult,
+  TabInfo,
+  WorkspaceView,
 } from '@/src/lib/messaging';
-import type { Snapshot } from '@/src/lib/types';
+import type { Snapshot, Workspace } from '@/src/lib/types';
 
 async function getActiveTab(): Promise<Browser.tabs.Tab | undefined> {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   return tab;
 }
 
-async function saveCurrent(name?: string): Promise<SaveResult> {
-  const tab = await getActiveTab();
-  if (!tab?.id || !tab.url) return { ok: false, error: 'No active tab.' };
-
-  let capture: CaptureResponse;
-  try {
-    capture = (await browser.tabs.sendMessage(tab.id, {
-      type: 'capture-tier1',
-    })) as CaptureResponse;
-  } catch {
-    return {
-      ok: false,
-      error: 'Could not reach the page. Reload it and try again.',
-    };
-  }
+/** Capture one tab's Tier-1 state into a stored Snapshot. Throws on failure. */
+async function captureTabToSnapshot(
+  tabId: number,
+  fallbackTitle?: string,
+  name?: string,
+): Promise<Snapshot> {
+  const capture = (await browser.tabs.sendMessage(tabId, {
+    type: 'capture-tier1',
+  })) as CaptureResponse;
 
   const url = new URL(capture.url);
   const snapshot: Snapshot = {
     id: crypto.randomUUID(),
     url: capture.url,
     origin: url.origin,
-    title: capture.title || tab.title || url.hostname,
+    title: capture.title || fallbackTitle || url.hostname,
     name,
     createdAt: Date.now(),
     tier1: capture.state,
   };
   await putSnapshot(snapshot);
-  return { ok: true, snapshot };
+  return snapshot;
+}
+
+async function saveCurrent(name?: string): Promise<SaveResult> {
+  const tab = await getActiveTab();
+  if (!tab?.id || !tab.url) return { ok: false, error: 'No active tab.' };
+  try {
+    const snapshot = await captureTabToSnapshot(tab.id, tab.title, name);
+    return { ok: true, snapshot };
+  } catch {
+    return {
+      ok: false,
+      error: 'Could not reach the page. Reload it and try again.',
+    };
+  }
 }
 
 /** Resolve once the given tab reports status === 'complete'. */
@@ -78,25 +95,129 @@ function waitForLoad(tabId: number, timeoutMs = 30_000): Promise<void> {
   });
 }
 
+/** Open a snapshot's URL in a new tab and apply its Tier-1 state. */
+async function openAndRestore(
+  snapshot: Snapshot,
+  active: boolean,
+): Promise<ApplyResponse['report']> {
+  const tab = await browser.tabs.create({ url: snapshot.url, active });
+  if (!tab.id) throw new Error('Could not open a tab.');
+  await waitForLoad(tab.id);
+  // Small settle for SPA bootstrapping; restore itself also retries.
+  await new Promise((r) => setTimeout(r, 300));
+  const res = (await browser.tabs.sendMessage(tab.id, {
+    type: 'apply-tier1',
+    state: snapshot.tier1,
+  })) as ApplyResponse;
+  return res.report;
+}
+
 async function restore(id: string): Promise<RestoreResult> {
   const snapshot = await getSnapshot(id);
   if (!snapshot) return { ok: false, error: 'Snapshot not found.' };
-
-  const tab = await browser.tabs.create({ url: snapshot.url, active: true });
-  if (!tab.id) return { ok: false, error: 'Could not open a tab.' };
-
   try {
-    await waitForLoad(tab.id);
-    // Small settle for SPA bootstrapping; restore itself also retries.
-    await new Promise((r) => setTimeout(r, 300));
-    const res = (await browser.tabs.sendMessage(tab.id, {
-      type: 'apply-tier1',
-      state: snapshot.tier1,
-    })) as ApplyResponse;
-    return { ok: true, report: res.report };
+    const report = await openAndRestore(snapshot, true);
+    return { ok: true, report };
   } catch (err) {
     return { ok: false, error: (err as Error).message };
   }
+}
+
+// --- Workspaces ---
+
+async function getOpenTabs(): Promise<TabInfo[]> {
+  const tabs = await browser.tabs.query({ currentWindow: true });
+  return tabs
+    .filter((t): t is Browser.tabs.Tab & { id: number; url: string } =>
+      Boolean(t.id && t.url && /^https?:/.test(t.url)),
+    )
+    .map((t) => ({
+      id: t.id,
+      title: t.title || t.url,
+      url: t.url,
+      favIconUrl: t.favIconUrl,
+    }));
+}
+
+async function saveWorkspace(
+  name: string,
+  tabIds: number[],
+): Promise<SaveWorkspaceResult> {
+  if (tabIds.length === 0) return { ok: false, error: 'No tabs selected.' };
+
+  const snapshotIds: string[] = [];
+  for (const tabId of tabIds) {
+    try {
+      const snap = await captureTabToSnapshot(tabId);
+      snapshotIds.push(snap.id);
+    } catch {
+      // Skip tabs we can't reach (e.g. not yet loaded); report the shortfall.
+    }
+  }
+  if (snapshotIds.length === 0) {
+    return {
+      ok: false,
+      error: 'Could not capture any of the selected tabs.',
+      requested: tabIds.length,
+      captured: 0,
+    };
+  }
+
+  const now = Date.now();
+  const workspace: Workspace = {
+    id: crypto.randomUUID(),
+    name: name.trim() || `Workspace ${new Date(now).toLocaleDateString()}`,
+    createdAt: now,
+    updatedAt: now,
+    snapshotIds,
+  };
+  await putWorkspace(workspace);
+  return {
+    ok: true,
+    workspace,
+    captured: snapshotIds.length,
+    requested: tabIds.length,
+  };
+}
+
+async function getWorkspaces(): Promise<ListWorkspacesResult> {
+  const [workspaces, snapshots] = await Promise.all([
+    listWorkspaces(),
+    listSnapshots(),
+  ]);
+  const byId = new Map(snapshots.map((s) => [s.id, s]));
+  const views: WorkspaceView[] = workspaces
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .map((workspace) => ({
+      workspace,
+      snapshots: workspace.snapshotIds
+        .map((id) => byId.get(id))
+        .filter((s): s is Snapshot => Boolean(s)),
+    }));
+  return { ok: true, workspaces: views };
+}
+
+async function restoreWorkspace(id: string): Promise<RestoreWorkspaceResult> {
+  const workspaces = await listWorkspaces();
+  const workspace = workspaces.find((w) => w.id === id);
+  if (!workspace) return { ok: false, error: 'Workspace not found.' };
+
+  const reports: RestoreWorkspaceResult['reports'] = [];
+  for (const snapshotId of workspace.snapshotIds) {
+    const snapshot = await getSnapshot(snapshotId);
+    if (!snapshot) {
+      reports.push({ snapshotId, error: 'Snapshot missing.' });
+      continue;
+    }
+    try {
+      // Open each in the background so they don't steal focus mid-restore.
+      const report = await openAndRestore(snapshot, false);
+      reports.push({ snapshotId, report });
+    } catch (err) {
+      reports.push({ snapshotId, error: (err as Error).message });
+    }
+  }
+  return { ok: true, reports };
 }
 
 export default defineBackground(() => {
@@ -118,6 +239,22 @@ export default defineBackground(() => {
           }
           case 'delete-snapshot':
             await deleteSnapshot(message.id);
+            sendResponse({ ok: true } satisfies SimpleResult);
+            break;
+          case 'list-tabs':
+            sendResponse({ ok: true, tabs: await getOpenTabs() } satisfies ListTabsResult);
+            break;
+          case 'save-workspace':
+            sendResponse(await saveWorkspace(message.name, message.tabIds));
+            break;
+          case 'list-workspaces':
+            sendResponse(await getWorkspaces());
+            break;
+          case 'restore-workspace':
+            sendResponse(await restoreWorkspace(message.id));
+            break;
+          case 'delete-workspace':
+            await deleteWorkspace(message.id);
             sendResponse({ ok: true } satisfies SimpleResult);
             break;
           default:
