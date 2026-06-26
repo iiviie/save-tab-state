@@ -12,6 +12,9 @@ import {
   putWorkspace,
   listWorkspaces,
   deleteWorkspace,
+  getSiteSetting,
+  listSiteSettings,
+  putSiteSetting,
 } from '@/src/lib/storage';
 import type {
   BackgroundCommand,
@@ -27,8 +30,15 @@ import type {
   RestoreWorkspaceResult,
   TabInfo,
   WorkspaceView,
+  SiteSettingResult,
+  ListSiteSettingsResult,
 } from '@/src/lib/messaging';
-import type { Snapshot, Workspace } from '@/src/lib/types';
+import type { Snapshot, Workspace, SiteSetting, Tier1State } from '@/src/lib/types';
+
+/** Default opt-in state for an origin we've never seen. */
+function defaultSetting(origin: string): SiteSetting {
+  return { origin, enabled: false, autoSave: false };
+}
 
 async function getActiveTab(): Promise<Browser.tabs.Tab | undefined> {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
@@ -220,6 +230,36 @@ async function restoreWorkspace(id: string): Promise<RestoreWorkspaceResult> {
   return { ok: true, reports };
 }
 
+// --- Site settings & auto-save ---
+
+async function autoSave(
+  url: string,
+  title: string,
+  state: Tier1State,
+): Promise<SimpleResult> {
+  const origin = new URL(url).origin;
+  const setting = await getSiteSetting(origin);
+  if (!setting?.enabled || !setting.autoSave) {
+    return { ok: false, error: 'Auto-save not enabled for this site.' };
+  }
+
+  // Dedupe: replace the existing auto snapshot for this exact URL, if any.
+  const existing = (await listSnapshots()).find(
+    (s) => s.auto && s.url === url,
+  );
+  const snapshot: Snapshot = {
+    id: existing?.id ?? crypto.randomUUID(),
+    url,
+    origin,
+    title: title || new URL(url).hostname,
+    createdAt: Date.now(),
+    tier1: state,
+    auto: true,
+  };
+  await putSnapshot(snapshot);
+  return { ok: true };
+}
+
 export default defineBackground(() => {
   browser.runtime.onMessage.addListener(
     (message: BackgroundCommand, _sender, sendResponse) => {
@@ -256,6 +296,26 @@ export default defineBackground(() => {
           case 'delete-workspace':
             await deleteWorkspace(message.id);
             sendResponse({ ok: true } satisfies SimpleResult);
+            break;
+          case 'get-site-setting': {
+            const setting =
+              (await getSiteSetting(message.origin)) ??
+              defaultSetting(message.origin);
+            sendResponse({ ok: true, setting } satisfies SiteSettingResult);
+            break;
+          }
+          case 'set-site-setting':
+            await putSiteSetting(message.setting);
+            sendResponse({ ok: true } satisfies SimpleResult);
+            break;
+          case 'list-site-settings':
+            sendResponse({
+              ok: true,
+              settings: await listSiteSettings(),
+            } satisfies ListSiteSettingsResult);
+            break;
+          case 'auto-save':
+            sendResponse(await autoSave(message.url, message.title, message.state));
             break;
           default:
             sendResponse({ ok: false, error: 'Unknown command.' });

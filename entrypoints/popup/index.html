@@ -12,6 +12,21 @@
       <a id="open-dashboard" href="#" title="Open dashboard">⛶</a>
     </header>
 
+    <section class="site">
+      <div class="toggle-row">
+        <label class="toggle">
+          <input id="enabled" type="checkbox" />
+          <span>Enable on <b id="host">this site</b></span>
+        </label>
+      </div>
+      <div class="toggle-row" id="autosave-row" hidden>
+        <label class="toggle">
+          <input id="autosave" type="checkbox" />
+          <span>Auto-save forms here</span>
+        </label>
+      </div>
+    </section>
+
     <section class="save">
       <input id="name" type="text" placeholder="Name this snapshot (optional)" />
       <button id="save" class="primary">Save this page</button>

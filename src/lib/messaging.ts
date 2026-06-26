@@ -5,7 +5,7 @@
 //
 // Each message has a `type` discriminant and a matching response shape.
 
-import type { Tier1State, Snapshot, Workspace } from './types';
+import type { Tier1State, Snapshot, Workspace, SiteSetting } from './types';
 import type { RestoreReport } from './restore';
 
 // --- content-script messages (background -> content) ---
@@ -79,6 +79,29 @@ export interface DeleteWorkspaceCmd {
   id: string;
 }
 
+// --- site settings (per-origin opt-in) ---
+
+export interface GetSiteSettingCmd {
+  type: 'get-site-setting';
+  origin: string;
+}
+export interface SetSiteSettingCmd {
+  type: 'set-site-setting';
+  setting: SiteSetting;
+}
+export interface ListSiteSettingsCmd {
+  type: 'list-site-settings';
+}
+
+// --- auto-save (content -> background) ---
+
+export interface AutoSaveCmd {
+  type: 'auto-save';
+  state: Tier1State;
+  title: string;
+  url: string;
+}
+
 export type BackgroundCommand =
   | SaveCmd
   | RestoreCmd
@@ -88,7 +111,11 @@ export type BackgroundCommand =
   | SaveWorkspaceCmd
   | ListWorkspacesCmd
   | RestoreWorkspaceCmd
-  | DeleteWorkspaceCmd;
+  | DeleteWorkspaceCmd
+  | GetSiteSettingCmd
+  | SetSiteSettingCmd
+  | ListSiteSettingsCmd
+  | AutoSaveCmd;
 
 export interface SaveResult {
   ok: boolean;
@@ -138,5 +165,16 @@ export interface RestoreWorkspaceResult {
   ok: boolean;
   /** Per-snapshot restore reports, in workspace order. */
   reports?: { snapshotId: string; report?: RestoreReport; error?: string }[];
+  error?: string;
+}
+
+export interface SiteSettingResult {
+  ok: boolean;
+  setting?: SiteSetting;
+  error?: string;
+}
+export interface ListSiteSettingsResult {
+  ok: boolean;
+  settings?: SiteSetting[];
   error?: string;
 }

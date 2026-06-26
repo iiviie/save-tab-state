@@ -14,6 +14,7 @@ import type {
   ContentMessage,
   CaptureResponse,
   ApplyResponse,
+  SiteSettingResult,
 } from '@/src/lib/messaging';
 import type { Tier1State } from '@/src/lib/types';
 
@@ -58,5 +59,54 @@ export default defineContentScript({
         return undefined;
       },
     );
+
+    void initAutoSave();
   },
 });
+
+/**
+ * Auto-save (PRD §7.1): when enabled for this origin, snapshot the page a short
+ * debounce after the user edits a form, so a crash/timeout loses almost nothing.
+ * Background dedupes auto snapshots per URL.
+ */
+async function initAutoSave() {
+  let setting: SiteSettingResult;
+  try {
+    setting = (await browser.runtime.sendMessage({
+      type: 'get-site-setting',
+      origin: location.origin,
+    })) as SiteSettingResult;
+  } catch {
+    return;
+  }
+  if (!setting.setting?.enabled || !setting.setting.autoSave) return;
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let saving = false;
+
+  const trigger = () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(async () => {
+      if (saving) return;
+      saving = true;
+      try {
+        const state = await captureTier1();
+        // Skip empty pages — nothing worth a snapshot yet.
+        if (state.fields.length === 0 && state.files.length === 0) return;
+        await browser.runtime.sendMessage({
+          type: 'auto-save',
+          state,
+          title: document.title,
+          url: location.href,
+        });
+      } catch {
+        /* tab closing or background asleep — next edit retries */
+      } finally {
+        saving = false;
+      }
+    }, 1500);
+  };
+
+  document.addEventListener('input', trigger, { capture: true, passive: true });
+  document.addEventListener('change', trigger, { capture: true, passive: true });
+}

@@ -5,8 +5,9 @@ import type {
   ListResult,
   RestoreResult,
   SimpleResult,
+  SiteSettingResult,
 } from '@/src/lib/messaging';
-import type { Snapshot } from '@/src/lib/types';
+import type { Snapshot, SiteSetting } from '@/src/lib/types';
 
 const $ = <T extends HTMLElement>(id: string): T =>
   document.getElementById(id) as T;
@@ -16,6 +17,12 @@ const saveBtn = $<HTMLButtonElement>('save');
 const statusEl = $<HTMLParagraphElement>('status');
 const listEl = $<HTMLUListElement>('snapshots');
 const emptyEl = $<HTMLParagraphElement>('empty');
+const enabledCb = $<HTMLInputElement>('enabled');
+const autosaveCb = $<HTMLInputElement>('autosave');
+const autosaveRow = $<HTMLDivElement>('autosave-row');
+const hostEl = $<HTMLElement>('host');
+
+let currentOrigin: string | null = null;
 
 function setStatus(text: string, kind: 'ok' | 'err' | '' = ''): void {
   statusEl.textContent = text;
@@ -51,7 +58,8 @@ function render(snapshots: Snapshot[]): void {
     const host = new URL(snap.url).hostname;
     const fileCount = snap.tier1.files.reduce((n, g) => n + g.files.length, 0);
     const filePart = fileCount > 0 ? ` · ${fileCount} files` : '';
-    meta.textContent = `${host} · ${snap.tier1.fields.length} fields${filePart} · ${relativeTime(snap.createdAt)}`;
+    const autoPart = snap.auto ? ' · auto' : '';
+    meta.textContent = `${host} · ${snap.tier1.fields.length} fields${filePart}${autoPart} · ${relativeTime(snap.createdAt)}`;
     info.append(title, meta);
 
     const actions = document.createElement('div');
@@ -77,6 +85,42 @@ async function refresh(): Promise<void> {
   })) as ListResult;
   render(res.snapshots ?? []);
 }
+
+function applySettingToUi(setting: SiteSetting): void {
+  enabledCb.checked = setting.enabled;
+  autosaveCb.checked = setting.autoSave;
+  autosaveRow.hidden = !setting.enabled;
+}
+
+async function loadSiteSetting(): Promise<void> {
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.url || !/^https?:/.test(tab.url)) {
+    hostEl.textContent = 'this page';
+    enabledCb.disabled = true;
+    return;
+  }
+  currentOrigin = new URL(tab.url).origin;
+  hostEl.textContent = new URL(tab.url).hostname;
+  const res = (await browser.runtime.sendMessage({
+    type: 'get-site-setting',
+    origin: currentOrigin,
+  })) as SiteSettingResult;
+  if (res.setting) applySettingToUi(res.setting);
+}
+
+async function saveSiteSetting(): Promise<void> {
+  if (!currentOrigin) return;
+  const setting: SiteSetting = {
+    origin: currentOrigin,
+    enabled: enabledCb.checked,
+    autoSave: enabledCb.checked && autosaveCb.checked,
+  };
+  applySettingToUi(setting);
+  await browser.runtime.sendMessage({ type: 'set-site-setting', setting });
+}
+
+enabledCb.addEventListener('change', saveSiteSetting);
+autosaveCb.addEventListener('change', saveSiteSetting);
 
 async function save(): Promise<void> {
   saveBtn.disabled = true;
@@ -133,4 +177,5 @@ $('open-dashboard').addEventListener('click', (e) => {
   browser.runtime.openOptionsPage?.();
 });
 
+loadSiteSetting();
 refresh();

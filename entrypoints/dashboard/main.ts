@@ -53,7 +53,8 @@ function render(snapshots: Snapshot[]): void {
     const host = new URL(snap.url).hostname;
     const fileCount = snap.tier1.files.reduce((n, g) => n + g.files.length, 0);
     const filePart = fileCount > 0 ? ` · ${fileCount} files` : '';
-    meta.textContent = `${host} · ${snap.tier1.fields.length} fields${filePart} · ${snap.tier1.scroll.length} scroll · ${fmtDate(snap.createdAt)}`;
+    const autoPart = snap.auto ? ' · auto' : '';
+    meta.textContent = `${host} · ${snap.tier1.fields.length} fields${filePart}${autoPart} · ${snap.tier1.scroll.length} scroll · ${fmtDate(snap.createdAt)}`;
 
     info.append(title, meta);
 

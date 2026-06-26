@@ -47,6 +47,32 @@ section {
   padding: 12px 14px;
 }
 
+.site {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-bottom: 1px solid var(--surface-2);
+}
+.toggle-row {
+  display: flex;
+}
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+.toggle input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+#autosave-row {
+  padding-left: 23px;
+}
+
 .save {
   display: flex;
   flex-direction: column;

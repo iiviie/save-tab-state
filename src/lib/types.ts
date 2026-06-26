@@ -71,6 +71,8 @@ export interface Snapshot {
   createdAt: number;
   /** The captured Tier-1 state. */
   tier1: Tier1State;
+  /** True for snapshots written by auto-save (deduped per URL). */
+  auto?: boolean;
   /** Optional data-URL screenshot/thumbnail for previews. */
   thumbnail?: string;
 }
